@@ -1,0 +1,19 @@
+# Build artifacts
+.build/
+.swiftpm/
+*.dSYM/
+
+# Assembled app & packages (ship these as GitHub Release assets, not in git)
+SnapFlow.app/
+/SnapFlow.zip
+/SnapFlow.dmg
+/dist/
+
+# macOS
+.DS_Store
+
+# Local signing config (may contain machine-specific identity)
+setup-signing.local.sh
+
+# Long-capture diagnostic log
+*.log

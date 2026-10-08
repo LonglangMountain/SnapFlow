@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnapFlow — 为 macOS 打造的截图工具</title>
+  <link rel="icon" type="image/png" href="appicon.png" />
+  <meta name="description" content="SnapFlow 是一款常驻菜单栏的 macOS 截图工具：区域 / 窗口 / 全屏截图、滚动长截图、强大的标注编辑器与钉图，全局快捷键一键触达。" />
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-soft: #f5f5f7;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #e3e3e6;
+      --brand: #4f7bff;
+      --brand-2: #7a5cff;
+      --accent: #12b886;
+      --maxw: 1080px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, "SF Pro Display", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+    /* nav */
+    header.nav {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: saturate(180%) blur(20px);
+      background: rgba(255,255,255,.72);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 17px; }
+    .brand img { width: 26px; height: 26px; border-radius: 6px; display: block; }
+    .nav-links { display: flex; gap: 30px; }
+    .nav-links a { color: var(--muted); font-size: 14px; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 980px; font-weight: 500; font-size: 14px;
+      cursor: pointer; transition: transform .15s, box-shadow .25s, opacity .2s; white-space: nowrap;
+    }
+    .btn-primary { background: var(--brand); color: #fff; box-shadow: 0 6px 20px rgba(79,123,255,.3); }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(79,123,255,.42); }
+    .btn-soft { background: var(--bg-soft); color: var(--text); }
+    .btn-soft:hover { background: #ebebed; }
+    .btn-lg { padding: 14px 30px; font-size: 16px; }
+
+    /* hero */
+    .hero { position: relative; text-align: center; padding: 88px 0 40px; overflow: hidden; }
+    .hero::before {
+      content: ""; position: absolute; left: 50%; top: -120px; transform: translateX(-50%);
+      width: 900px; height: 520px; border-radius: 50%;
+      background: radial-gradient(closest-side, rgba(122,92,255,.14), transparent 70%),
+                  radial-gradient(closest-side, rgba(79,123,255,.12), transparent 70%);
+      filter: blur(10px); pointer-events: none;
+    }
+    .hero-icon {
+      width: 112px; height: 112px; border-radius: 26px; display: block; margin: 0 auto 28px;
+      box-shadow: 0 24px 60px rgba(79,123,255,.34);
+    }
+    .hero h1 {
+      font-size: clamp(40px, 6.4vw, 72px); line-height: 1.06; letter-spacing: -1.5px; font-weight: 700;
+    }
+    .hero h1 .grad {
+      background: linear-gradient(120deg, var(--brand), var(--brand-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero p.lead { max-width: 600px; margin: 22px auto 0; color: var(--muted); font-size: clamp(17px, 2.2vw, 21px); }
+    .hero-cta { display: flex; gap: 14px; justify-content: center; margin-top: 34px; flex-wrap: wrap; }
+    .hero-meta { margin-top: 18px; font-size: 13px; color: var(--muted); }
+
+    /* hero screenshot in macOS window frame */
+    .window {
+      max-width: 840px; margin: 56px auto 0; background: #fff;
+      border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+      box-shadow: 0 34px 80px rgba(0,0,0,.22), 0 6px 18px rgba(0,0,0,.08);
+    }
+    .win-bar {
+      display: flex; align-items: center; height: 40px; padding: 0 15px;
+      background: #f6f6f8; border-bottom: 1px solid var(--line);
+    }
+    .win-bar .dots { display: flex; gap: 8px; }
+    .win-bar .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+    .win-title { flex: 1; text-align: center; font-size: 13px; color: var(--muted); margin-right: 52px; }
+    .window img { display: block; width: 100%; height: auto; }
+
+    /* sections */
+    section { padding: 92px 0; }
+    .sec-head { text-align: center; max-width: 620px; margin: 0 auto 56px; }
+    .sec-head h2 { font-size: clamp(30px, 4.2vw, 44px); font-weight: 700; letter-spacing: -.6px; }
+    .sec-head p { color: var(--muted); margin-top: 14px; font-size: 17px; }
+
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .feat {
+      background: var(--bg-soft); border: 1px solid transparent; border-radius: 18px;
+      padding: 30px 26px; transition: transform .2s, box-shadow .25s;
+    }
+    .feat:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(0,0,0,.08); }
+    .feat .ico {
+      width: 48px; height: 48px; border-radius: 13px; display: grid; place-items: center;
+      font-size: 24px; margin-bottom: 18px; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.06);
+    }
+    .feat h3 { font-size: 19px; font-weight: 600; margin-bottom: 8px; }
+    .feat p { color: var(--muted); font-size: 15px; }
+
+    /* tools */
+    .tools-band { background: var(--bg-soft); }
+    .tools { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 720px; margin: 0 auto; }
+    .tool-chip {
+      display: inline-flex; align-items: center; gap: 9px; padding: 12px 22px;
+      background: #fff; border: 1px solid var(--line); border-radius: 980px; font-size: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.04);
+    }
+    .tool-chip .swatch { width: 12px; height: 12px; border-radius: 4px; }
+
+    /* download */
+    .download { text-align: center; }
+    .download .panel {
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      border-radius: 28px; padding: 70px 28px; color: #fff; box-shadow: 0 30px 70px rgba(79,123,255,.35);
+    }
+    .download h2 { font-size: clamp(30px, 4.2vw, 44px); font-weight: 700; letter-spacing: -.5px; }
+    .download p { margin: 16px auto 32px; max-width: 500px; opacity: .92; font-size: 16px; }
+    .download .btn-primary { background: #fff; color: var(--brand); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+    .download .btn-soft { background: rgba(255,255,255,.16); color: #fff; }
+    .download .btn-soft:hover { background: rgba(255,255,255,.26); }
+    .dl-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .dl-note { margin-top: 24px; font-size: 13px; opacity: .8; }
+
+    /* footer */
+    footer { border-top: 1px solid var(--line); padding: 36px 0; color: var(--muted); font-size: 14px; }
+    .foot-inner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+
+    @media (max-width: 820px) {
+      .grid { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><img src="appicon.png" alt="SnapFlow" /> SnapFlow</a>
+    <nav class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#tools">标注</a>
+      <a href="#download">下载</a>
+    </nav>
+    <a class="btn btn-primary" href="#download">免费下载</a>
+  </div>
+</header>
+
+<a id="top"></a>
+<section class="hero">
+  <div class="wrap">
+    <img src="appicon.png" alt="SnapFlow 应用图标" class="hero-icon" />
+    <h1>截图，<span class="grad">如水般流畅</span></h1>
+    <p class="lead">常驻菜单栏的 macOS 截图工具。区域、窗口、全屏、滚动长截图，配合强大的标注编辑器，每一次捕捉都行云流水。</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="#download">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.6l3.3-3.3 1.4 1.4L12 17.4 6.3 11.7l1.4-1.4L11 13.6V3h1zM5 19h14v2H5z"/></svg>
+        下载 SnapFlow
+      </a>
+      <a class="btn btn-soft btn-lg" href="#features">了解功能</a>
+    </div>
+    <p class="hero-meta">v0.1.0 · 原生 Swift · 基于 ScreenCaptureKit · 支持 macOS 14 及以上</p>
+
+    <div class="window">
+      <div class="win-bar">
+        <span class="dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></span>
+        <span class="win-title">SnapFlow — 区域截图</span>
+      </div>
+      <img src="hero-shot.png" alt="SnapFlow 区域截图与标注编辑器实拍" />
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>一个菜单栏，覆盖每种截图</h2>
+      <p>从随手一截到整页长图，SnapFlow 都能优雅拿下。</p>
+    </div>
+    <div class="grid">
+      <div class="feat"><div class="ico">✂️</div><h3>区域截图</h3><p>拖拽框选任意区域，实时显示尺寸与放大镜，像素级精准。</p></div>
+      <div class="feat"><div class="ico">🪟</div><h3>窗口截图</h3><p>自动识别屏幕窗口，悬停高亮，一键捕捉带阴影的独立窗口。</p></div>
+      <div class="feat"><div class="ico">🖥️</div><h3>全屏截图</h3><p>多显示器支持，一键捕捉整块屏幕，快速留存全貌。</p></div>
+      <div class="feat"><div class="ico">📜</div><h3>滚动长截图</h3><p>自动滚动并智能拼接，把超出屏幕的内容合成为一张完整长图。</p></div>
+      <div class="feat"><div class="ico">📌</div><h3>钉图置顶</h3><p>将截图钉在屏幕最上层，随时对照参考，不被其他窗口遮挡。</p></div>
+      <div class="feat"><div class="ico">🪶</div><h3>轻量常驻</h3><p>安静待在菜单栏，无 Dock 图标、不打扰工作流，随叫随到。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="tools" class="tools-band">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>截完即改的标注编辑器</h2>
+      <p>非破坏性标注，随时调整、撤销与重排，截图完成即可圈重点。</p>
+    </div>
+    <div class="tools">
+      <span class="tool-chip"><span class="swatch" style="background:#4f7bff"></span>矩形</span>
+      <span class="tool-chip"><span class="swatch" style="background:#7a5cff"></span>椭圆</span>
+      <span class="tool-chip"><span class="swatch" style="background:#12b886"></span>箭头</span>
+      <span class="tool-chip"><span class="swatch" style="background:#febc2e"></span>直线</span>
+      <span class="tool-chip"><span class="swatch" style="background:#ff5f57"></span>画笔</span>
+      <span class="tool-chip"><span class="swatch" style="background:#ff8ac4"></span>文字</span>
+      <span class="tool-chip"><span class="swatch" style="background:#4fd1ff"></span>序号标记</span>
+      <span class="tool-chip"><span class="swatch" style="background:#9aa3b7"></span>马赛克</span>
+    </div>
+  </div>
+</section>
+
+<section id="download" class="download">
+  <div class="wrap">
+    <div class="panel">
+      <h2>立即开始使用 SnapFlow</h2>
+      <p>免费下载，安装即用。首次运行请在「系统设置 → 隐私与安全性 → 屏幕录制」中授权。</p>
+      <div class="dl-row">
+        <a class="btn btn-primary btn-lg" href="https://github.com/LonglangMountain/SnapFlow/releases/latest/download/SnapFlow.dmg">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.6l3.3-3.3 1.4 1.4L12 17.4 6.3 11.7l1.4-1.4L11 13.6V3h1zM5 19h14v2H5z"/></svg>
+          下载 .dmg
+        </a>
+        <a class="btn btn-soft btn-lg" href="https://github.com/LonglangMountain/SnapFlow/releases/latest/download/SnapFlow.zip">下载 .zip</a>
+      </div>
+      <p class="dl-note">要求 macOS 14 Sonoma 及以上 · Apple Silicon 与 Intel 均支持</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <a class="brand" href="#top"><img src="appicon.png" alt="SnapFlow" style="width:22px;height:22px;border-radius:5px;" /> SnapFlow</a>
+    <div>© 2026 SnapFlow · 为 macOS 打造的截图工具</div>
+  </div>
+</footer>
+</body>
+</html>
