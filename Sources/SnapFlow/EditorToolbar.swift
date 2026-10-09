@@ -121,7 +121,16 @@ final class PillIconButton: TipButton {
     /// keeps each symbol at this point size (no upscaling, so they look uniform)
     /// and only shrinks the rare glyph that would otherwise overflow — which is
     /// what was clipping the wider icons before.
-    private static let symbolConfig = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+    private static let defaultGlyphPointSize: CGFloat = 18
+
+    /// Per-button glyph size override (e.g. a slightly larger save icon).
+    /// Re-applies the symbol configuration to the current image when changed.
+    var glyphPointSize: CGFloat = PillIconButton.defaultGlyphPointSize {
+        didSet {
+            guard oldValue != glyphPointSize else { return }
+            super.image = Self.configure(super.image, pointSize: glyphPointSize)
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -140,11 +149,14 @@ final class PillIconButton: TipButton {
     /// Enlarge every assigned SF Symbol and keep it template-tinted.
     override var image: NSImage? {
         get { super.image }
-        set {
-            let configured = newValue?.withSymbolConfiguration(Self.symbolConfig) ?? newValue
-            configured?.isTemplate = true
-            super.image = configured
-        }
+        set { super.image = Self.configure(newValue, pointSize: glyphPointSize) }
+    }
+
+    private static func configure(_ image: NSImage?, pointSize: CGFloat) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
+        let configured = image?.withSymbolConfiguration(config) ?? image
+        configured?.isTemplate = true
+        return configured
     }
 
     override var intrinsicContentSize: NSSize { NSSize(width: 33, height: 31) }

@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .window: captureManager.begin(.window)
         case .screen: captureManager.begin(.screen)
         case .scrolling: captureManager.begin(.scrolling)
+        case .ocr: captureManager.begin(.ocr)
         case .pin: captureManager.pinLatest()
         }
     }

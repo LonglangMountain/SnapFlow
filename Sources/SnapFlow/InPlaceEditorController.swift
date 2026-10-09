@@ -13,7 +13,7 @@ final class InPlaceEditorController: NSObject {
     private let canvas = InPlaceCanvasView()
 
     private let toolOrder: [EditorTool] = [
-        .rectangle, .ellipse, .arrow, .line, .pen, .mosaic, .text, .number
+        .rectangle, .ellipse, .arrow, .pen, .mosaic, .text, .number
     ]
     private var toolButtons: [PillIconButton] = []
     private var undoButton: PillIconButton?
@@ -41,6 +41,9 @@ final class InPlaceEditorController: NSObject {
 
     /// Pin the flattened image; provided by the owner.
     var onPin: ((CGImage) -> Void)?
+    /// Recognize text in the current (annotated) image; the owner shows the
+    /// result list panel (scenario B — fine extraction, no re-capture).
+    var onRecognize: ((CGImage) -> Void)?
     /// Start a scrolling long-capture (toolbar button); provided by the owner.
     var onLongCapture: (() -> Void)?
     /// Re-capture request when the selection is resized (overlay-view rect).
@@ -229,10 +232,10 @@ final class InPlaceEditorController: NSObject {
         content.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(content)
         NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 10),
-            content.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -10),
-            content.topAnchor.constraint(equalTo: host.topAnchor, constant: 6),
-            content.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -6)
+            content.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 8),
+            content.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -8),
+            content.topAnchor.constraint(equalTo: host.topAnchor, constant: 4),
+            content.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -4)
         ])
         return pill
     }
@@ -249,10 +252,10 @@ final class InPlaceEditorController: NSObject {
 
     private func makeToolPill() -> NSView {
         let symbols: [EditorTool: (String, String)] = [
-            .select: ("cursorarrow", "选择/移动（点击标注可拖动，Delete 删除）"), .rectangle: ("rectangle", "矩形"),
-            .ellipse: ("circle", "圆形"), .arrow: ("arrow.up.right", "箭头"),
-            .line: ("line.diagonal", "直线"), .pen: ("pencil.line", "画笔"),
-            .mosaic: ("square.grid.3x3", "马赛克"), .text: ("textformat", "文字"),
+            .select: ("cursorarrow", "选择/移动（点击标注可拖动，Delete 删除）"), .rectangle: ("rectangle", "矩形（按住 Shift 画正方形）"),
+            .ellipse: ("circle", "圆形（按住 Shift 画正圆）"), .arrow: ("arrow.up.right", "箭头"),
+            .pen: ("pencil.line", "画笔（按住 Shift 画直线）"),
+            .mosaic: ("square.grid.3x3", "马赛克"), .text: ("t.square", "文字"),
             .number: ("number.circle", "编号")
         ]
         var views: [NSView] = []
@@ -278,7 +281,9 @@ final class InPlaceEditorController: NSObject {
         let redo = pillButton("arrow.uturn.forward", tip: "重做 ⌘⇧Z", action: #selector(redoTapped))
         redo.keyEquivalent = "z"; redo.keyEquivalentModifierMask = [.command, .shift]
         redoButton = redo
-        views += [undo, redo, PillSeparator()]
+        // Redo icon is hidden by request; the button is parked (zero-size) in the
+        // pill below so ⌘⇧Z still works — only `undo` shows in the bar.
+        views += [undo, PillSeparator()]
 
         let pin = pillButton("pin", tip: "钉在屏幕上 ⌘⇧P", action: #selector(pinTapped))
         pin.keyEquivalent = "p"; pin.keyEquivalentModifierMask = [.command, .shift]
@@ -286,8 +291,12 @@ final class InPlaceEditorController: NSObject {
         copy.keyEquivalent = "c"; copy.keyEquivalentModifierMask = [.command, .shift]
         let save = pillButton("square.and.arrow.down", tip: "保存 ⌘S", action: #selector(saveTapped))
         save.keyEquivalent = "s"; save.keyEquivalentModifierMask = .command
+        save.glyphPointSize = 20   // save icon reads a touch larger than the rest
+        let ocr = pillButton("text.viewfinder", tip: "识别文字", action: #selector(ocrTapped))
         let long = pillButton("scroll", tip: "长截图", action: #selector(longCaptureTapped))
-        views += [pin, copy, save, long, PillSeparator()]
+        long.glyphPointSize = 19   // nudge the long-capture icon up 1pt
+        let actionSep = PillSeparator()
+        views += [pin, copy, save, ocr, long, actionSep]
 
         let cancel = pillButton("xmark", tip: "放弃 (ESC)", action: #selector(cancelTapped))
         cancel.contentTintColor = .systemRed; cancel.keyEquivalent = "\u{1b}"
@@ -296,8 +305,16 @@ final class InPlaceEditorController: NSObject {
         views += [cancel, done]
 
         let stack = NSStackView(views: views)
-        stack.orientation = .horizontal; stack.spacing = 6; stack.alignment = .centerY
-        return pill(stack, radius: 10)
+        stack.orientation = .horizontal; stack.spacing = 4; stack.alignment = .centerY
+        // The 长截图↔关闭 divider felt oversized; tighten just that gap.
+        stack.setCustomSpacing(2, after: long)
+        stack.setCustomSpacing(2, after: actionSep)
+        let bar = pill(stack, radius: 8)
+        // Keep the redo button in the hierarchy (zero-size, not hidden) so its
+        // ⌘⇧Z key equivalent keeps firing without drawing an icon.
+        redo.frame = .zero
+        bar.addSubview(redo)
+        return bar
     }
     // STYLE_PLACEHOLDER
 
@@ -328,7 +345,7 @@ final class InPlaceEditorController: NSObject {
         grid.orientation = .vertical; grid.spacing = 3
         let stack = NSStackView(views: dots + [PillSeparator(), grid])
         stack.orientation = .horizontal; stack.spacing = 6; stack.alignment = .centerY
-        return pill(stack, radius: 10)
+        return pill(stack, radius: 8)
     }
 
     // MARK: - Actions
@@ -379,6 +396,13 @@ final class InPlaceEditorController: NSObject {
     @objc private func copyTapped() {
         guard let image = viewModel.render() else { return }
         ImageSaver.copyToClipboard(image)
+    }
+
+    /// Recognize text in the current image and hand it to the owner, which
+    /// shows the result list for partial selection/copy (no re-capture).
+    @objc private func ocrTapped() {
+        guard let image = viewModel.render() else { return }
+        onRecognize?(image)
     }
 
     @objc private func pinTapped() {

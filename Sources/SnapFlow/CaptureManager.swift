@@ -1,12 +1,13 @@
 import AppKit
 import ImageIO
 
-/// The four capture modes from the design doc.
+/// The capture modes from the design doc (plus OCR screen-text extraction).
 enum CaptureMode: Int {
     case area = 1
     case window = 2
     case screen = 3
     case scrolling = 4
+    case ocr = 5
 }
 
 /// Orchestrates the capture pipeline: HotKey / menu -> mode -> overlay (for
@@ -22,9 +23,12 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     private let pinManager = PinManager()
     private var lastImage: CGImage?
     private var areaSelectionForLong = false
+    private var areaSelectionForOCR = false
     private var editors: [EditorWindowController] = []
     private var inPlaceEditor: InPlaceEditorController?
     private var settingsController: SettingsWindowController?
+    private var ocrHUD: OCRResultHUD?
+    private var ocrResult: OCRResultListController?
     private var isCapturing = false
 
     func begin(_ mode: CaptureMode) {
@@ -40,6 +44,8 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
             beginScreenCapture()
         case .scrolling:
             beginLongCapture()
+        case .ocr:
+            beginOCRCapture()
         }
     }
 
@@ -47,12 +53,22 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
 
     private func beginAreaCapture() {
         areaSelectionForLong = false
+        areaSelectionForOCR = false
         presentAreaOverlays()
     }
 
     /// Long capture reuses the area-selection UI to pick the scroll region.
     private func beginLongCapture() {
         areaSelectionForLong = true
+        areaSelectionForOCR = false
+        presentAreaOverlays()
+    }
+
+    /// Scenario A (quick extract): reuse the area-selection UI, but on finish
+    /// recognize text directly and copy it — no editor is opened.
+    private func beginOCRCapture() {
+        areaSelectionForLong = false
+        areaSelectionForOCR = true
         presentAreaOverlays()
     }
 
@@ -77,7 +93,9 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
 
     func overlay(_ overlay: CaptureOverlayWindow, didSelect rect: CGRect, on screen: NSScreen) {
         let forLong = areaSelectionForLong
+        let forOCR = areaSelectionForOCR
         areaSelectionForLong = false
+        areaSelectionForOCR = false
         guard rect.width >= 1, rect.height >= 1 else {
             teardownOverlays()
             isCapturing = false
@@ -89,6 +107,20 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
                 self?.finishLong(with: image)
             }
             longCapture.start(region: rect, screen: screen)
+        } else if forOCR {
+            func snap(_ v: CGFloat) -> CGFloat { v.rounded() }
+            let aligned = CGRect(x: snap(rect.minX), y: snap(rect.minY),
+                                 width: snap(rect.width), height: snap(rect.height))
+            teardownOverlays()
+            Task { @MainActor in
+                defer { self.isCapturing = false }
+                guard let full = await capturer.captureFullScreen(screen),
+                      let image = self.crop(full, region: aligned, screen: screen) else {
+                    NSLog("SnapFlow: OCR capture failed")
+                    return
+                }
+                await self.runScreenOCR(on: image, region: aligned, screen: screen)
+            }
         } else {
         // Snap the selection to WHOLE POINTS, then use the exact same rect for
         // both the capture crop and the on-screen canvas placement. Whole points
@@ -175,6 +207,12 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
                                 width: region.width, height: region.height)
             self?.pinManager.pin(pinned, at: global, on: screen)
         }
+        // Scenario B (fine extraction): recognize the current image and show the
+        // result list for partial selection/copy — no screen re-capture. Pass
+        // the live region so the panel can dock beside (not over) the shot.
+        controller.onRecognize = { [weak self] image in
+            self?.showOCRList(for: image, region: region, on: screen)
+        }
         // Long-capture reuses the CURRENT selection region directly — no new
         // selection overlay. The frozen editor tears down, then we scroll-capture
         // the exact same rect on the same screen.
@@ -206,6 +244,7 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     func overlayDidCancel(_ overlay: CaptureOverlayWindow) {
         teardownOverlays()
         areaSelectionForLong = false
+        areaSelectionForOCR = false
         isCapturing = false
     }
 
@@ -326,6 +365,47 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
         }
     }
 
+    // MARK: - OCR
+
+    /// Scenario A: recognize text in the captured region, copy ALL of it, and
+    /// show a floating result HUD. No editor, no result list.
+    @MainActor
+    private func runScreenOCR(on image: CGImage, region: CGRect, screen: NSScreen) async {
+        let segments = await TextRecognizer.recognize(image)
+        if segments.isEmpty {
+            presentOCRHUD(message: "未识别到文字", region: region, screen: screen)
+        } else {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(segments.joined(separator: "\n"), forType: .string)
+            presentOCRHUD(message: "已复制 \(segments.count) 段文字", region: region, screen: screen)
+        }
+    }
+
+    @MainActor
+    private func presentOCRHUD(message: String, region: CGRect, screen: NSScreen) {
+        ocrHUD?.close()
+        let hud = OCRResultHUD(message: message)
+        ocrHUD = hud
+        hud.present(region: region, on: screen)
+    }
+
+    /// Scenario B: recognize the editor image and open the result list panel
+    /// docked to the right of the capture region.
+    @MainActor
+    private func showOCRList(for image: CGImage, region: CGRect, on screen: NSScreen) {
+        Task { @MainActor in
+            let segments = await TextRecognizer.recognize(image)
+            let controller = OCRResultListController(segments: segments)
+            controller.onClose = { [weak self] in
+                self?.ocrResult = nil
+                self?.updateActivationPolicy()
+            }
+            self.ocrResult = controller
+            self.updateActivationPolicy()
+            controller.present(region: region, on: screen)
+        }
+    }
+
     // MARK: - Pin (design §20)
 
     /// Pins the most recent capture as a floating window (⌘⇧V).
@@ -391,6 +471,7 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     private func updateActivationPolicy() {
         let hasWindows = !editors.isEmpty
             || settingsController != nil
+            || ocrResult != nil
         NSApp.setActivationPolicy(hasWindows ? .regular : .accessory)
     }
 }

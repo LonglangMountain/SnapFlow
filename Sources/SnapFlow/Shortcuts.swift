@@ -62,7 +62,7 @@ struct KeyShortcut: Equatable {
 
 /// The shortcut-configurable actions.
 enum ShortcutAction: String, CaseIterable {
-    case area, window, screen, scrolling, pin
+    case area, window, screen, scrolling, ocr, pin
 
     var title: String {
         switch self {
@@ -70,6 +70,7 @@ enum ShortcutAction: String, CaseIterable {
         case .window: return "窗口截图"
         case .screen: return "全屏截图"
         case .scrolling: return "长截图"
+        case .ocr: return "提取屏幕文字"
         case .pin: return "钉最近截图"
         }
     }
@@ -81,6 +82,7 @@ enum ShortcutAction: String, CaseIterable {
         case .window: return 2
         case .screen: return 3
         case .scrolling: return 4
+        case .ocr: return 5
         case .pin: return 100
         }
     }
@@ -92,6 +94,7 @@ enum ShortcutAction: String, CaseIterable {
         case .window:    return KeyShortcut(keyCode: UInt32(kVK_ANSI_3), carbonModifiers: cmdShift, key: "3")
         case .screen:    return KeyShortcut(keyCode: UInt32(kVK_ANSI_4), carbonModifiers: cmdShift, key: "4")
         case .scrolling: return KeyShortcut(keyCode: UInt32(kVK_ANSI_5), carbonModifiers: cmdShift, key: "5")
+        case .ocr:       return KeyShortcut(keyCode: UInt32(kVK_ANSI_O), carbonModifiers: cmdShift, key: "O")
         case .pin:       return KeyShortcut(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: cmdShift, key: "V")
         }
     }

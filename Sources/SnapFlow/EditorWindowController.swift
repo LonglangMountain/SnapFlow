@@ -16,7 +16,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     var pixelScale: CGFloat = 2
 
     private let toolOrder: [EditorTool] = [
-        .rectangle, .ellipse, .arrow, .line, .pen, .text, .mosaic, .number
+        .rectangle, .ellipse, .arrow, .pen, .text, .mosaic, .number
     ]
     private var toolButtons: [PillIconButton] = []
     private var undoButton: PillIconButton?
@@ -287,13 +287,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     private func makeToolPill() -> NSView {
         let symbols: [EditorTool: (String, String)] = [
             .select: ("cursorarrow", "选择/移动（点击标注可拖动，Delete 删除）"),
-            .rectangle: ("rectangle", "矩形"),
-            .ellipse: ("circle", "圆形"),
+            .rectangle: ("rectangle", "矩形（按住 Shift 画正方形）"),
+            .ellipse: ("circle", "圆形（按住 Shift 画正圆）"),
             .arrow: ("arrow.up.right", "箭头"),
-            .line: ("line.diagonal", "直线"),
-            .pen: ("pencil.line", "画笔"),
+            .pen: ("pencil.line", "画笔（按住 Shift 画直线）"),
             .mosaic: ("square.grid.3x3", "马赛克"),
-            .text: ("textformat", "文字"),
+            .text: ("t.square", "文字"),
             .number: ("number.circle", "编号")
         ]
 
