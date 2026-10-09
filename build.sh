@@ -61,8 +61,61 @@ if [ "$CONFIG" = "release" ]; then
     rm -rf dist
     mkdir -p dist
     ditto -c -k --keepParent "$BUNDLE" "dist/${APP_NAME}.zip"
-    hdiutil create -quiet -volname "$APP_NAME" -srcfolder "$BUNDLE" \
-        -ov -format UDZO "dist/${APP_NAME}.dmg"
+
+    # Build a "drag to Applications" installer DMG: stage the app next to an
+    # /Applications symlink, lay the window out with Finder, then compress.
+    STAGE="dist/dmg-stage"
+    rm -rf "$STAGE"
+    mkdir -p "$STAGE"
+    cp -R "$BUNDLE" "$STAGE/"
+    ln -s /Applications "$STAGE/Applications"
+
+    RW_DMG="dist/${APP_NAME}-rw.dmg"
+    hdiutil create -quiet -volname "$APP_NAME" -srcfolder "$STAGE" \
+        -fs HFS+ -format UDRW -ov "$RW_DMG"
+
+    # Detach any stale volume of the same name first, so our image mounts under
+    # the exact expected name (otherwise it becomes "SnapFlow 1" and the Finder
+    # layout below targets the wrong disk and fails with -10006).
+    for v in /Volumes/"${APP_NAME}"*; do
+        [ -d "$v" ] && hdiutil detach "$v" -force -quiet 2>/dev/null || true
+    done
+
+    ATTACH="$(hdiutil attach -readwrite -noverify -noautoopen "$RW_DMG")"
+    DEV="$(echo "$ATTACH" | awk '/^\/dev\// {print $1; exit}')"
+    MOUNT="$(echo "$ATTACH" | sed -n 's/.*\(\/Volumes\/.*\)$/\1/p' | tail -1)"
+    VOL="$(basename "$MOUNT")"
+
+    # Window layout is cosmetic — never fail the build if Finder automation is
+    # unavailable (headless/CI); the Applications symlink alone enables install.
+    osascript <<EOF || echo "    (skipped Finder layout)"
+tell application "Finder"
+  tell disk "${VOL}"
+    open
+    delay 1
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {200, 150, 740, 520}
+    set opts to the icon view options of container window
+    set arrangement of opts to not arranged
+    set icon size of opts to 96
+    set position of item "${APP_NAME}.app" of container window to {150, 190}
+    set position of item "Applications" of container window to {400, 190}
+    update without registering applications
+    delay 1
+    close
+  end tell
+end tell
+EOF
+
+    sync
+    hdiutil detach "$DEV" -quiet || hdiutil detach "$MOUNT" -force -quiet || true
+    hdiutil convert "$RW_DMG" -quiet -format UDZO -imagekey zlib-level=9 \
+        -ov -o "dist/${APP_NAME}.dmg"
+    rm -f "$RW_DMG"
+    rm -rf "$STAGE"
+
     echo "    dist/${APP_NAME}.zip"
     echo "    dist/${APP_NAME}.dmg"
 fi
