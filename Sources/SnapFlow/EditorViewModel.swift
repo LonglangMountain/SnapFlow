@@ -74,7 +74,14 @@ final class EditorViewModel {
     func extendDraft(to point: CGPoint, constrained: Bool = false) {
         guard var draft = draftAnnotation else { return }
         if draft.type == .pen {
-            draft.points.append(point)
+            if constrained {
+                // Hold Shift with the pen: draw a straight line from the stroke's
+                // start point to the cursor (a 2-point polyline renders as a line).
+                let start = draft.points.first ?? point
+                draft.points = [start, point]
+            } else {
+                draft.points.append(point)
+            }
         } else {
             let start = draft.points.first ?? point
             let end = constrained ? Self.constrain(draft.type, from: start, to: point) : point

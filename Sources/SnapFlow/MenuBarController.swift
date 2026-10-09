@@ -62,6 +62,12 @@ final class MenuBarController {
                                 modifiers: scrolling.nsModifierFlags,
                                 mode: .scrolling,
                                 enabled: true))
+        let ocr = ShortcutStore.shortcut(for: .ocr)
+        menu.addItem(actionItem(title: "提取屏幕文字",
+                                key: ocr.keyEquivalent,
+                                modifiers: ocr.nsModifierFlags,
+                                mode: .ocr,
+                                enabled: true))
 
         menu.addItem(.separator())
         let pin = ShortcutStore.shortcut(for: .pin)
