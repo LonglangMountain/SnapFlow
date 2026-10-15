@@ -12,10 +12,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let axStatus = NSTextField(labelWithString: "")
     private let launchToggle = NSButton(checkboxWithTitle: "开机时启动 SnapFlow",
                                         target: nil, action: nil)
+    private let updateStatus = NSTextField(labelWithString: "")
+    private let updateButton = NSButton(title: "检查更新", target: nil, action: nil)
     var onClose: (() -> Void)?
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 520),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 550),
                           styleMask: [.titled, .closable],
                           backing: .buffered,
                           defer: false)
@@ -56,12 +58,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         generalTitle.font =         .systemFont(ofSize: 15, weight: .semibold)
         launchToggle.target = self
         launchToggle.action = #selector(toggleLaunchAtLogin(_:))
+        let updateRow = updateCheckRow()
 
         // Shortcut editor.
         let shortcutTitle = NSTextField(labelWithString: "快捷键")
         shortcutTitle.font =         .systemFont(ofSize: 15, weight: .semibold)
         var views: [NSView] = [title, screenRow, axRow, note,
-                               generalTitle, launchToggle, shortcutTitle]
+                               generalTitle, launchToggle, updateRow,
+                               shortcutTitle]
         views += ShortcutAction.allCases.map(shortcutRow)
 
         let stack = NSStackView(views: views)
@@ -96,6 +100,22 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         return row
     }
 
+    private func updateCheckRow() -> NSView {
+        let version = NSTextField(labelWithString: "当前版本 \(UpdateChecker.currentVersion)")
+        version.widthAnchor.constraint(equalToConstant: 160).isActive = true
+        updateButton.target = self
+        updateButton.action = #selector(checkForUpdates)
+        updateButton.bezelStyle = .rounded
+        updateStatus.font = .systemFont(ofSize: 11)
+        updateStatus.textColor = .secondaryLabelColor
+        let github = NSButton(title: "GitHub", target: self, action: #selector(openGitHub))
+        github.bezelStyle = .rounded
+        let row = NSStackView(views: [version, updateButton, github, updateStatus])
+        row.orientation = .horizontal
+        row.spacing = 10
+        return row
+    }
+
     private func shortcutRow(_ action: ShortcutAction) -> NSView {
         let name = NSTextField(labelWithString: action.title)
         name.widthAnchor.constraint(equalToConstant: 160).isActive = true
@@ -120,6 +140,32 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         axStatus.textColor = axOK ? .systemGreen : .systemRed
 
         launchToggle.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
+    }
+
+    @objc private func openGitHub() {
+        NSWorkspace.shared.open(UpdateChecker.repoPage)
+    }
+
+    @objc private func checkForUpdates() {
+        updateButton.isEnabled = false
+        updateStatus.stringValue = "正在检查…"
+        updateStatus.textColor = .secondaryLabelColor
+        Task {
+            let result = await UpdateChecker.check()
+            updateButton.isEnabled = true
+            switch result {
+            case .upToDate:
+                updateStatus.stringValue = "已是最新版本"
+                updateStatus.textColor = .systemGreen
+            case .available(let version):
+                updateStatus.stringValue = "发现新版本 \(version)"
+                updateStatus.textColor = .systemOrange
+                UpdateChecker.promptUpdate(version)
+            case .failed(let message):
+                updateStatus.stringValue = "检查失败：\(message)"
+                updateStatus.textColor = .systemRed
+            }
+        }
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSButton) {
