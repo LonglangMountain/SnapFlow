@@ -20,6 +20,10 @@ final class CaptureOverlayView: NSView {
     /// backdrop for the in-place editor, but stop reacting to the mouse.
     private var editing = false
 
+    /// Full-screen grab taken when the shortcut fired; drawn as the backdrop
+    /// when set (nil for long capture, which needs the live screen).
+    var frozenImage: CGImage? { didSet { needsDisplay = true } }
+
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
 
@@ -171,17 +175,31 @@ final class CaptureOverlayView: NSView {
     // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0, alpha: 0.35).setFill()
-        bounds.fill()
+        let dim = NSColor(white: 0, alpha: 0.45)
+        let selection = currentRect.flatMap { $0.width >= 1 && $0.height >= 1 ? $0 : nil }
 
-        guard let rect = currentRect, rect.width >= 1, rect.height >= 1 else {
+        if let frozen = frozenImage {
+            // Show the screen as it was when the shortcut fired, so transient
+            // content (toasts, hover menus) stays visible while selecting and
+            // matches what is actually captured.
+            NSGraphicsContext.current?.cgContext.draw(frozen, in: bounds)
+            dim.setFill()
+            let mask = NSBezierPath(rect: bounds)
+            if let selection { mask.append(NSBezierPath(rect: selection)) }
+            mask.windingRule = .evenOdd
+            mask.fill()
+        } else {
+            dim.setFill()
+            bounds.fill()
+            // Punch a clear hole so the live screen shows through the selection.
+            selection?.fill(using: .clear)
+        }
+
+        guard let rect = selection else {
             // No selection yet: show the colour-picker magnifier under the cursor.
             if !editing { drawLoupe() }
             return
         }
-
-        // Punch a clear hole so the live screen shows through the selection.
-        rect.fill(using: .clear)
 
         // Selection border (blue like the reference; thicker once editing).
         NSColor.controlAccentColor.setStroke()

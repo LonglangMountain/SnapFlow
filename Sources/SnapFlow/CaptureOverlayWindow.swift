@@ -64,4 +64,9 @@ final class CaptureOverlayWindow: NSWindow {
     func updateSelection(_ rect: CGRect) {
         (contentView as? CaptureOverlayView)?.updateSelectionRect(rect)
     }
+
+    /// Display a frozen full-screen grab behind the selection UI.
+    func showFrozen(_ image: CGImage) {
+        (contentView as? CaptureOverlayView)?.frozenImage = image
+    }
 }

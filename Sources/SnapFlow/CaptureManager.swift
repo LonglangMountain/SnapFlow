@@ -30,6 +30,8 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     private var ocrHUD: OCRResultHUD?
     private var ocrResult: OCRResultListController?
     private var isCapturing = false
+    /// Per-overlay full-screen grabs taken when the area/OCR shortcut fired.
+    private var frozenGrabs: [ObjectIdentifier: Task<CGImage?, Never>] = [:]
 
     func begin(_ mode: CaptureMode) {
         // Include already-pinned screenshots in this capture (they're our own
@@ -89,6 +91,29 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
         for overlay in overlays {
             overlay.makeKeyAndOrderFront(nil)
         }
+
+        // Freeze each screen the moment the shortcut fires (not when the
+        // selection is committed), so short-lived content like a 2s toast is
+        // still in the shot. Long capture needs the live screen, so skip it.
+        // Our overlays are excluded from the grab, so ordering doesn't matter.
+        frozenGrabs.removeAll()
+        guard !areaSelectionForLong else { return }
+        for (overlay, screen) in zip(overlays, NSScreen.screens) {
+            let task = Task { @MainActor [capturer] in
+                let image = await capturer.captureFullScreen(screen)
+                if let image { overlay.showFrozen(image) }
+                return image
+            }
+            frozenGrabs[ObjectIdentifier(overlay)] = task
+        }
+    }
+
+    /// The shortcut-time grab for this overlay, falling back to a fresh capture.
+    private func frozenFullScreen(for overlay: CaptureOverlayWindow, screen: NSScreen) async -> CGImage? {
+        let task = frozenGrabs[ObjectIdentifier(overlay)]
+        frozenGrabs.removeAll()   // release the other screens' grabs
+        if let image = await task?.value { return image }
+        return await capturer.captureFullScreen(screen)
     }
 
     func overlay(_ overlay: CaptureOverlayWindow, didSelect rect: CGRect, on screen: NSScreen) {
@@ -114,7 +139,7 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
             teardownOverlays()
             Task { @MainActor in
                 defer { self.isCapturing = false }
-                guard let full = await capturer.captureFullScreen(screen),
+                guard let full = await self.frozenFullScreen(for: overlay, screen: screen),
                       let image = self.crop(full, region: aligned, screen: screen) else {
                     NSLog("SnapFlow: OCR capture failed")
                     return
@@ -140,10 +165,10 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
             overlays = [overlay]
             overlay.enterEditing()
             Task { @MainActor in
-                // Freeze the WHOLE screen once, then crop. Live resizing re-crops
-                // from this frozen grab, so it stays crisp with no stretch and no
-                // extra ScreenCaptureKit round-trips.
-                guard let full = await capturer.captureFullScreen(screen),
+                // Crop from the screen frozen at shortcut time. Live resizing
+                // re-crops from this grab, so it stays crisp with no stretch and
+                // no extra ScreenCaptureKit round-trips.
+                guard let full = await self.frozenFullScreen(for: overlay, screen: screen),
                       let image = self.crop(full, region: aligned, screen: screen) else {
                     teardownOverlays(); isCapturing = false; return
                 }
@@ -243,6 +268,7 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
 
     func overlayDidCancel(_ overlay: CaptureOverlayWindow) {
         teardownOverlays()
+        frozenGrabs.removeAll()
         areaSelectionForLong = false
         areaSelectionForOCR = false
         isCapturing = false
