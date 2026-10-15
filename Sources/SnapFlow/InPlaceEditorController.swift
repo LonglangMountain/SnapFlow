@@ -287,8 +287,6 @@ final class InPlaceEditorController: NSObject {
 
         let pin = pillButton("pin", tip: "钉在屏幕上 ⌘⇧P", action: #selector(pinTapped))
         pin.keyEquivalent = "p"; pin.keyEquivalentModifierMask = [.command, .shift]
-        let copy = pillButton("doc.on.doc", tip: "复制 ⌘⇧C", action: #selector(copyTapped))
-        copy.keyEquivalent = "c"; copy.keyEquivalentModifierMask = [.command, .shift]
         let save = pillButton("square.and.arrow.down", tip: "保存 ⌘S", action: #selector(saveTapped))
         save.keyEquivalent = "s"; save.keyEquivalentModifierMask = .command
         save.glyphPointSize = 20   // save icon reads a touch larger than the rest
@@ -296,7 +294,7 @@ final class InPlaceEditorController: NSObject {
         let long = pillButton("scroll", tip: "长截图", action: #selector(longCaptureTapped))
         long.glyphPointSize = 19   // nudge the long-capture icon up 1pt
         let actionSep = PillSeparator()
-        views += [pin, copy, save, ocr, long, actionSep]
+        views += [pin, save, ocr, long, actionSep]
 
         let cancel = pillButton("xmark", tip: "放弃 (ESC)", action: #selector(cancelTapped))
         cancel.contentTintColor = .systemRed; cancel.keyEquivalent = "\u{1b}"
@@ -392,11 +390,6 @@ final class InPlaceEditorController: NSObject {
 
     @objc private func undoTapped() { viewModel.undo() }
     @objc private func redoTapped() { viewModel.redo() }
-
-    @objc private func copyTapped() {
-        guard let image = viewModel.render() else { return }
-        ImageSaver.copyToClipboard(image)
-    }
 
     /// Recognize text in the current image and hand it to the owner, which
     /// shows the result list for partial selection/copy (no re-capture).

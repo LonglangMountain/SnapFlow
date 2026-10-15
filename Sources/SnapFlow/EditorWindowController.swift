@@ -357,15 +357,11 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         pin.keyEquivalent = "p"
         pin.keyEquivalentModifierMask = [.command, .shift]
 
-        let copy = pillButton("doc.on.doc", tip: "复制 ⌘⇧C", action: #selector(copyTapped))
-        copy.keyEquivalent = "c"
-        copy.keyEquivalentModifierMask = [.command, .shift]
-
         let save = pillButton("square.and.arrow.down", tip: "保存 ⌘S", action: #selector(saveTapped))
         save.keyEquivalent = "s"
         save.keyEquivalentModifierMask = .command
         let long = pillButton("scroll", tip: "长截图", action: #selector(longCaptureTapped))
-        views.append(contentsOf: [pin, copy, save, long, PillSeparator()])
+        views.append(contentsOf: [pin, save, long, PillSeparator()])
 
         let cancel = pillButton("xmark", tip: "放弃 (ESC)", action: #selector(cancelTapped))
         cancel.contentTintColor = .systemRed
@@ -509,11 +505,6 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
 
     @objc private func undoTapped() { viewModel.undo() }
     @objc private func redoTapped() { viewModel.redo() }
-
-    @objc private func copyTapped() {
-        guard let image = viewModel.render() else { return }
-        ImageSaver.copyToClipboard(image)
-    }
 
     /// Pins the flattened image (annotations included) and closes the editor —
     /// the pinned window is what stays on screen.
