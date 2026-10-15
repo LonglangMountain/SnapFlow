@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-15
+
+### Added
+- 区域截图 / 提取屏幕文字在按下快捷键的瞬间定格屏幕，框选过程中消失的内容
+  （如 2 秒 toast）也能截到；框选背景即定格画面，所见即所得。
+- 设置 → 通用：显示当前版本，新增「检查更新」（对比 GitHub 最新 Release）
+  与「GitHub」项目主页入口。
+
+### Changed
+- 截图时选区外遮罩加深。
+
+### Fixed
+- 框选区域较大时长截图内容重复堆叠。
+- 长截图实时预览与「已截 xxx px」高度显示延迟严重。
+
+### Removed
+- 移除编辑器操作栏的「复制」按钮（⌘⇧C）；「完成 ✓」即复制并关闭。
+
 ## [0.2.0] - 2026-10-08
 
 ### Added
@@ -44,6 +62,7 @@ AppKit + ScreenCaptureKit.
 - Full Retina-resolution captures.
 - Universal binary (Apple Silicon + Intel); packaged as `.zip` and `.dmg`.
 
-[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.0
 [0.2.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.2.0
 [0.1.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.1.0
