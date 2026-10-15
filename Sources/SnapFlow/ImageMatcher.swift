@@ -1,3 +1,4 @@
+import Accelerate
 import CoreGraphics
 
 /// The result of matching two consecutive long-capture frames (design §11).
@@ -24,7 +25,10 @@ struct OverlapResult {
 final class ImageMatcher {
 
     private let matchWidth = 64
-    private let maxMatchHeight = 150
+    // Coarse-pass height cap. Too low and large regions get downsampled 10×+,
+    // text lines alias, and the coarse pass locks onto a wrong (larger) period —
+    // which the ±vf refine can't recover from → repeated content in the stitch.
+    private let maxMatchHeight = 400
 
     func findOverlap(previous: CGImage, current: CGImage) -> OverlapResult {
         let fullHeight = current.height
@@ -55,20 +59,26 @@ final class ImageMatcher {
         // looks soft). Re-score a SMALL window of shifts around `approx` at full
         // vertical resolution. Unlike the old refine this never re-renders the
         // whole frame — it only grays a short band — so it stays cheap.
-        let refined = refine(previous: previous, current: current,
-                             approx: approx, window: vf,
-                             fullHeight: fullHeight, width: w)
-        return OverlapResult(offset: refined ?? approx, confidence: confidence(coarse.score))
+        // Confidence comes from the pixel-exact refine score when available: a
+        // true alignment is near-identical at full resolution, while a wrong
+        // periodic match that slipped through the coarse pass is not.
+        if let refined = refine(previous: previous, current: current,
+                                approx: approx, window: vf,
+                                fullHeight: fullHeight, width: w) {
+            return OverlapResult(offset: refined.offset, confidence: confidence(refined.score))
+        }
+        return OverlapResult(offset: approx, confidence: confidence(coarse.score))
     }
 
-    private func confidence(_ score: Double) -> Double { max(0, 1 - score / 64.0) }
+    private func confidence(_ score: Double) -> Double { max(0, 1 - score / 24.0) }
 
     /// Re-scores shifts in `approx ± window` using full-resolution rows, so the
-    /// returned offset is pixel-exact. Returns nil when the band would run past
-    /// the frame (caller falls back to the coarse estimate).
+    /// returned offset is pixel-exact, along with its mean-absolute-difference
+    /// score. Returns nil when the band would run past the frame (caller falls
+    /// back to the coarse estimate).
     private func refine(previous: CGImage, current: CGImage,
                         approx: Int, window: Int,
-                        fullHeight: Int, width w: Int) -> Int? {
+                        fullHeight: Int, width w: Int) -> (offset: Int, score: Double)? {
         let anchorPx = max(1, fullHeight / 20)
         let lo = max(0, approx - window)
         let hi = approx + window
@@ -77,59 +87,73 @@ final class ImageMatcher {
         guard maxBand > 8 else { return nil }
         let band = min(240, maxBand)
 
-        guard let cur = grayscaleBand(current, top: anchorPx, height: band, width: w),
-              let prev = grayscaleBand(previous, top: anchorPx + lo,
-                                       height: (hi - lo) + band, width: w) else {
+        guard let curBytes = grayscaleBand(current, top: anchorPx, height: band, width: w),
+              let prevBytes = grayscaleBand(previous, top: anchorPx + lo,
+                                            height: (hi - lo) + band, width: w) else {
             return nil
         }
 
+        let cur = toFloat(curBytes), prev = toFloat(prevBytes)
+        var scratch = [Float](repeating: 0, count: band * w)
         var bestD = approx
-        var bestScore = Double.greatestFiniteMagnitude
+        var bestScore = Float.greatestFiniteMagnitude
         for d in lo...hi {
-            let pBase = (d - lo) * w
-            var sum = 0
-            for y in 0..<band {
-                let cRow = y * w
-                let pRow = pBase + y * w
-                for x in 0..<w {
-                    sum += abs(Int(cur[cRow + x]) - Int(prev[pRow + x]))
-                }
-            }
-            if Double(sum) < bestScore {
-                bestScore = Double(sum)
+            let score = meanAbsDiff(cur, 0, prev, (d - lo) * w, count: band * w, scratch: &scratch)
+            if score < bestScore {
+                bestScore = score
                 bestD = d
             }
         }
-        return bestD
+        return (bestD, Double(bestScore))
     }
 
 
     /// Scores each shift `d` over the full overlap `cur[anchor..<H-d]` vs
     /// `prev[anchor+d..<H]` and returns the best. Ties break toward the smaller
     /// shift so a marginally-better periodic match can't over-estimate.
-    private func shift(prev: [UInt8], cur: [UInt8], width w: Int,
+    private func shift(prev prevBytes: [UInt8], cur curBytes: [UInt8], width w: Int,
                        anchor: Int, range: ClosedRange<Int>) -> (offset: Int, score: Double) {
-        let height = prev.count / w
+        let height = prevBytes.count / w
+        let cur = toFloat(curBytes), prev = toFloat(prevBytes)
+        var scratch = [Float](repeating: 0, count: cur.count)
         var bestD = range.lowerBound
-        var bestScore = Double.greatestFiniteMagnitude
+        var bestScore = Float.greatestFiniteMagnitude
         for d in range {
             let rows = height - anchor - d
             guard rows > 0 else { break }
-            var sum = 0
-            for y in 0..<rows {
-                let cRow = (anchor + y) * w
-                let pRow = (anchor + d + y) * w
-                for x in 0..<w {
-                    sum += abs(Int(cur[cRow + x]) - Int(prev[pRow + x]))
-                }
-            }
-            let norm = Double(sum) / Double(rows * w)
-            if norm < bestScore {
-                bestScore = norm
+            // Rows are contiguous, so each overlap is one flat run of bytes.
+            let score = meanAbsDiff(cur, anchor * w, prev, (anchor + d) * w,
+                                    count: rows * w, scratch: &scratch)
+            if score < bestScore {
+                bestScore = score
                 bestD = d
             }
         }
-        return (bestD, bestScore)
+        return (bestD, Double(bestScore))
+    }
+
+    private func toFloat(_ bytes: [UInt8]) -> [Float] {
+        vDSP.integerToFloatingPoint(bytes, floatingPointType: Float.self)
+    }
+
+    /// Mean |a - b| over `count` elements starting at the given offsets.
+    /// Vectorized via vDSP so it stays fast even in unoptimized debug builds
+    /// (the scalar loop took ~650ms/frame there and lagged the HUD).
+    private func meanAbsDiff(_ a: [Float], _ aOff: Int, _ b: [Float], _ bOff: Int,
+                             count: Int, scratch: inout [Float]) -> Float {
+        var sum: Float = 0
+        a.withUnsafeBufferPointer { ap in
+            b.withUnsafeBufferPointer { bp in
+                scratch.withUnsafeMutableBufferPointer { sp in
+                    let n = vDSP_Length(count)
+                    // vDSP_vsub computes B - A.
+                    vDSP_vsub(bp.baseAddress! + bOff, 1, ap.baseAddress! + aOff, 1,
+                              sp.baseAddress!, 1, n)
+                    vDSP_svemg(sp.baseAddress!, 1, &sum, n)
+                }
+            }
+        }
+        return sum / Float(count)
     }
 
     /// Grays a vertical band `[top, top+height)` of `image` at **full vertical
@@ -157,7 +181,9 @@ final class ImageMatcher {
                                       bitmapInfo: CGImageAlphaInfo.none.rawValue) else {
                 return false
             }
-            ctx.interpolationQuality = .low
+            // Area-averaged downsampling; `.low` is near point-sampling and
+            // aliases text rows when a large frame is shrunk a lot.
+            ctx.interpolationQuality = .high
             // A bitmap context's memory starts at the image's top row, so
             // drawing straight in already gives buffer row 0 == top of image.
             ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
