@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-16
+
+### Added
+- 长截图自动匀速滚动：操作栏新增 ▶/❚❚，鼠标移入截图区域开始匀速滚动、移出即
+  暂停，滚到底自动停止；不移动用户鼠标。
+
+### Changed
+- 长截图操作栏位置与普通截图操作栏保持一致，并为出现/消失加入淡入淡出动画。
+- 编辑器「保存」默认文件名改为 `SnapFlow-时间戳.png`（与自动保存一致）。
+- 工具选中背景上下边距各收窄 2pt。
+
+### Fixed
+- 长截图在重复表格行场景下的内容重复 / 错位：粗匹配保留多个候选并全分辨率精修，
+  且支持上下双向匹配，回弹或往回滚不再被当作新内容拼接。
+
 ## [0.3.0] - 2026-10-15
 
 ### Added
@@ -62,7 +77,8 @@ AppKit + ScreenCaptureKit.
 - Full Retina-resolution captures.
 - Universal binary (Apple Silicon + Intel); packaged as `.zip` and `.dmg`.
 
-[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.1
 [0.3.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.0
 [0.2.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.2.0
 [0.1.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.1.0
