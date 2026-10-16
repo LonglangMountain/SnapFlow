@@ -424,7 +424,7 @@ final class InPlaceEditorController: NSObject {
               let window = hostWindow else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = "SnapFlow.png"
+        panel.nameFieldStringValue = ImageSaver.defaultFileName()
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
             try? data.write(to: url)

@@ -16,7 +16,7 @@ enum ImageSaver {
         let dir = pictures.appendingPathComponent("SnapFlow", isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        let url = dir.appendingPathComponent("SnapFlow-\(timestamp()).png")
+        let url = dir.appendingPathComponent(defaultFileName())
         do {
             try data.write(to: url)
             return url
@@ -24,6 +24,12 @@ enum ImageSaver {
             NSLog("SnapFlow: failed to write \(url.path): \(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// `SnapFlow-yyyyMMdd-HHmmss.png` — used for auto-save and as the save
+    /// panel's suggested name.
+    static func defaultFileName() -> String {
+        "SnapFlow-\(timestamp()).png"
     }
 
     /// Copies `image` to the general pasteboard as PNG (+ TIFF fallback).
