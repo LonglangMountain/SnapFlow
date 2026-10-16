@@ -3,19 +3,24 @@ import ApplicationServices
 
 /// Drives scrolling of the target during a long capture.
 ///
-/// V1 uses synthetic scroll-wheel events (CGEvent) posted after warping the
-/// cursor over the capture region. Actual movement is never trusted blindly —
-/// ImageMatcher measures the real delta from the frames (see design §10) — so
-/// this only needs to produce a consistent downward scroll with overlap.
-/// A future refinement is AXUIElement-based targeting (design §13).
+/// Posts plain synthetic scroll-wheel events (CGEvent) at the current pointer
+/// position; the long-capture loop only does so while the pointer is over the
+/// capture region. Actual movement is never trusted blindly — ImageMatcher
+/// measures the real delta from the frames (see design §10) — so this only
+/// needs to produce a consistent downward scroll with overlap.
 final class ScrollController {
 
     /// Whether the process may post synthetic events. Prompts once if needed.
+    ///
+    /// Accessibility trust is what lets `CGEvent.post` reach other apps. The
+    /// post-event preflight is also accepted, but it can keep returning false
+    /// for the running process even after the grant (seen on macOS 15), so it
+    /// must not be the only check.
     @discardableResult
     func ensureAccessibilityPermission() -> Bool {
+        if AXIsProcessTrusted() || CGPreflightPostEventAccess() { return true }
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue()
-        let options = [key: true] as CFDictionary
-        return AXIsProcessTrustedWithOptions(options)
+        return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
     /// Move the pointer over the region so scroll events hit the right view.
