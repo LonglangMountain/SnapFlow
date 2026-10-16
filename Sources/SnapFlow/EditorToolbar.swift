@@ -164,7 +164,7 @@ final class PillIconButton: TipButton {
     override func draw(_ dirtyRect: NSRect) {
         if state == .on {
             NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 3),
                          xRadius: 6, yRadius: 6).fill()
         }
         super.draw(dirtyRect)
