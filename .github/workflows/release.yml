@@ -1,0 +1,44 @@
+name: Release
+
+# 推送 vX.Y.Z 标签即自动构建并发布 Release，无需任何手动操作。
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # 创建 Release、上传产物需要写权限
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build universal app + dmg/zip
+        run: ./build.sh release universal
+
+      - name: Extract changelog section
+        id: notes
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          # 取 CHANGELOG.md 中 "## [TAG]" 到下一个 "## [" 之间的内容作为发布说明。
+          awk -v tag="$TAG" '
+            $0 ~ "^## \\[" tag "\\]" {grab=1; next}
+            grab && /^## \[/ {exit}
+            grab {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then echo "See CHANGELOG.md." > RELEASE_NOTES.md; fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            dist/SnapFlow.dmg dist/SnapFlow.zip
