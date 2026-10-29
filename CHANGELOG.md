@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-28
+
+### Fixed
+- 区域截图 / 提取屏幕文字可以截到 Chrome DevTools「审查元素」的高亮框：
+  按下快捷键时先同步定格屏幕，再显示遮罩，且显示遮罩时不抢焦点，
+  高亮不再消失或闪烁。
+
+### Changed
+- 启动时及屏幕排布变化时预热截屏内容过滤器，减少截图前的等待。
+
 ## [0.3.1] - 2026-10-16
 
 ### Added
@@ -77,7 +87,8 @@ AppKit + ScreenCaptureKit.
 - Full Retina-resolution captures.
 - Universal binary (Apple Silicon + Intel); packaged as `.zip` and `.dmg`.
 
-[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.2
 [0.3.1]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.1
 [0.3.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.0
 [0.2.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.2.0
