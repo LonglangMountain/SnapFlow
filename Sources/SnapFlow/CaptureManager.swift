@@ -18,6 +18,11 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     private var windowOverlays: [WindowSelectionOverlayWindow] = []
     private var candidateWindows: [WindowInfo] = []
     private let capturer = ScreenCapturer()
+
+    /// Warm the screen-capture filters so the first freeze grab isn't slow.
+    func prewarmCapture() {
+        Task { await capturer.prewarm() }
+    }
     private let windowEnumerator = WindowEnumerator()
     private lazy var longCapture = LongCaptureManager(capturer: capturer)
     private let pinManager = PinManager()
@@ -30,8 +35,12 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     private var ocrHUD: OCRResultHUD?
     private var ocrResult: OCRResultListController?
     private var isCapturing = false
-    /// Per-overlay full-screen grabs taken when the area/OCR shortcut fired.
-    private var frozenGrabs: [ObjectIdentifier: Task<CGImage?, Never>] = [:]
+    /// Per-overlay full-screen grab taken the moment the area/OCR shortcut
+    /// fired — before SnapFlow takes focus, so focus-sensitive content survives.
+    private var frozenGrabs: [ObjectIdentifier: CGImage] = [:]
+    /// Global key monitor active while the area overlay is up but SnapFlow is
+    /// not yet the active app (handles ESC before the first click).
+    private var areaKeyMonitor: Any?
 
     func begin(_ mode: CaptureMode) {
         // Include already-pinned screenshots in this capture (they're our own
@@ -86,33 +95,73 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
             overlay.overlayDelegate = self
             overlays.append(overlay)
         }
-
-        NSApp.activate(ignoringOtherApps: true)
-        for overlay in overlays {
-            overlay.makeKeyAndOrderFront(nil)
-        }
-
-        // Freeze each screen the moment the shortcut fires (not when the
-        // selection is committed), so short-lived content like a 2s toast is
-        // still in the shot. Long capture needs the live screen, so skip it.
-        // Our overlays are excluded from the grab, so ordering doesn't matter.
         frozenGrabs.removeAll()
-        guard !areaSelectionForLong else { return }
-        for (overlay, screen) in zip(overlays, NSScreen.screens) {
-            let task = Task { @MainActor [capturer] in
-                let image = await capturer.captureFullScreen(screen)
-                if let image { overlay.showFrozen(image) }
-                return image
-            }
-            frozenGrabs[ObjectIdentifier(overlay)] = task
+
+        // Long capture needs the live screen (it scrolls): show immediately.
+        if areaSelectionForLong {
+            NSApp.activate(ignoringOtherApps: true)
+            for overlay in overlays { overlay.makeKeyAndOrderFront(nil) }
+            return
         }
+
+        // Area / OCR. Root cause of every flash/blank attempt before this: the
+        // freeze grab used ScreenCaptureKit, which is ASYNC (~100ms). Whatever
+        // we did with the overlay during that gap (show dim, stay transparent,
+        // reveal late) either hid the DevTools highlight or popped in late.
+        //
+        // Fix: grab each screen SYNCHRONOUSLY and instantly — right here, before
+        // any overlay exists or we take focus — with CGDisplayCreateImage. It's
+        // deprecated but it's the only immediate full-res grab; ScreenCaptureKit
+        // has no synchronous path. The shot therefore contains the highlight
+        // (Chrome is still frontmost), and there is NO gap: we show the overlay
+        // with the frozen backdrop already in hand, exactly like a normal shot.
+        var frozen: [ObjectIdentifier: CGImage] = [:]
+        for (overlay, screen) in zip(overlays, NSScreen.screens) {
+            if let id = screen.displayID, let image = CGDisplayCreateImage(id) {
+                frozen[ObjectIdentifier(overlay)] = image
+                overlay.showFrozen(image)
+            }
+        }
+        frozenGrabs = frozen
+
+        // Show WITHOUT stealing focus. The flash was Chrome's DevTools highlight
+        // (its own top-most window) disappearing the instant SnapFlow activated.
+        // Since the frozen grab already contains the highlight, we don't need
+        // focus to take the shot — so just order the overlay front and defer
+        // activation to the first click. A global key monitor handles ESC/Enter
+        // until then.
+        for overlay in overlays {
+            overlay.setFirstMouseActivate { [weak overlay] in
+                NSApp.activate(ignoringOtherApps: true)
+                overlay?.makeKey()
+            }
+            overlay.orderFrontRegardless()
+        }
+        installAreaKeyMonitor()
+    }
+
+    /// Handle ESC (cancel) / Enter before the first click, while SnapFlow is
+    /// intentionally not the active app (so showing the overlay didn't steal
+    /// focus). Removed in `teardownOverlays`.
+    private func installAreaKeyMonitor() {
+        removeAreaKeyMonitor()
+        areaKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, !self.overlays.isEmpty else { return }
+            if event.keyCode == 53 {   // ESC
+                self.overlayDidCancel(self.overlays[0])
+            }
+        }
+    }
+
+    private func removeAreaKeyMonitor() {
+        if let m = areaKeyMonitor { NSEvent.removeMonitor(m); areaKeyMonitor = nil }
     }
 
     /// The shortcut-time grab for this overlay, falling back to a fresh capture.
     private func frozenFullScreen(for overlay: CaptureOverlayWindow, screen: NSScreen) async -> CGImage? {
-        let task = frozenGrabs[ObjectIdentifier(overlay)]
+        let image = frozenGrabs[ObjectIdentifier(overlay)]
         frozenGrabs.removeAll()   // release the other screens' grabs
-        if let image = await task?.value { return image }
+        if let image { return image }
         return await capturer.captureFullScreen(screen)
     }
 
@@ -275,6 +324,7 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     }
 
     private func teardownOverlays() {
+        removeAreaKeyMonitor()
         for overlay in overlays { overlay.orderOut(nil) }
         overlays.removeAll()
         for overlay in windowOverlays { overlay.orderOut(nil) }

@@ -9,6 +9,31 @@ final class ScreenCapturer {
     /// SnapFlow (i.e. pinned screenshots), so a new shot can include them.
     var includedWindowNumbers: [CGWindowID] = []
 
+    /// Per-display content filters, built ahead of time by `prewarm()`.
+    /// Enumerating shareable content costs ~150ms PER display (≈300ms on a
+    /// two-screen setup), which delayed the freeze grab enough to look like a
+    /// flash. The captured pixels are always live at grab time; only the
+    /// window-exclusion list comes from here, so a slightly stale filter is
+    /// harmless (it still excludes our own app by pid).
+    private var cachedFilters: [CGDirectDisplayID: SCContentFilter] = [:]
+
+    /// Enumerate shareable content once and cache a filter per display. Call at
+    /// launch and whenever the screen arrangement changes.
+    func prewarm() async {
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(
+            false, onScreenWindowsOnly: false) else { return }
+        let selfApps = content.applications.filter {
+            $0.processID == ProcessInfo.processInfo.processIdentifier
+        }
+        var cache: [CGDirectDisplayID: SCContentFilter] = [:]
+        for display in content.displays {
+            cache[display.displayID] = SCContentFilter(display: display,
+                                                       excludingApplications: selfApps,
+                                                       exceptingWindows: [])
+        }
+        cachedFilters = cache
+    }
+
     /// Captures a sub-region of `screen`.
     /// - Parameter rect: selection in screen-local coordinates (bottom-left
     ///   origin, points), as produced by the overlay view.
@@ -61,7 +86,17 @@ final class ScreenCapturer {
 
     /// Captures the entire `screen`.
     func captureFullScreen(_ screen: NSScreen) async -> CGImage? {
-        guard let (_, filter) = await displayAndFilter(for: screen) else { return nil }
+        // Use the prewarmed filter when we don't need to keep pinned windows
+        // (the common area/OCR case): it skips the slow per-call enumeration,
+        // so the freeze grab is fast enough not to flash.
+        let filter: SCContentFilter?
+        if includedWindowNumbers.isEmpty, let id = screen.displayID,
+           let cached = cachedFilters[id] {
+            filter = cached
+        } else {
+            filter = await displayAndFilter(for: screen)?.1
+        }
+        guard let filter else { return nil }
 
         let scale = screen.backingScaleFactor
         let config = SCStreamConfiguration()
@@ -132,7 +167,7 @@ final class ScreenCapturer {
     }
 }
 
-private extension NSScreen {
+extension NSScreen {
     /// The CoreGraphics display ID backing this screen.
     var displayID: CGDirectDisplayID? {
         deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID

@@ -7,6 +7,11 @@ final class CaptureOverlayView: NSView {
     /// Called with the selection rect in view (screen-local) coordinates.
     var onComplete: ((CGRect) -> Void)?
     var onCancel: (() -> Void)?
+    /// Called once, on the first click, to let the owner take focus only then —
+    /// so merely SHOWING the overlay doesn't steal focus (and make a focus-
+    /// sensitive highlight under it flicker).
+    var onFirstMouseActivate: (() -> Void)?
+    private var didActivate = false
 
     private var startPoint: NSPoint?
     private var currentRect: NSRect?
@@ -26,6 +31,10 @@ final class CaptureOverlayView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
+
+    /// Receive the activating click as a real mouseDown, so a drag can start on
+    /// the very first click even though our app wasn't active.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -54,6 +63,8 @@ final class CaptureOverlayView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard !editing else { return }
+        // Take focus only now (first interaction), not when the overlay appeared.
+        if !didActivate { didActivate = true; onFirstMouseActivate?() }
         startPoint = convert(event.locationInWindow, from: nil)
         currentRect = .zero
         // Starting a selection hides the color loupe.

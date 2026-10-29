@@ -69,4 +69,9 @@ final class CaptureOverlayWindow: NSWindow {
     func showFrozen(_ image: CGImage) {
         (contentView as? CaptureOverlayView)?.frozenImage = image
     }
+
+    /// Set the first-click activation handler (see CaptureOverlayView).
+    func setFirstMouseActivate(_ handler: @escaping () -> Void) {
+        (contentView as? CaptureOverlayView)?.onFirstMouseActivate = handler
+    }
 }

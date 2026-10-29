@@ -24,6 +24,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Warm up the SwiftData history store so persistence issues surface now.
         MainActor.assumeIsolated { _ = HistoryStore.shared }
+
+        // Prewarm the screen-capture filters (enumeration is slow) and refresh
+        // them whenever the display arrangement changes, so the freeze grab at
+        // capture time is fast and doesn't flash.
+        captureManager.prewarmCapture()
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in
+            self?.captureManager.prewarmCapture()
+        }
     }
 
     /// (Re)register every global shortcut from the store.
