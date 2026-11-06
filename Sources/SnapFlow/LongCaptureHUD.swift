@@ -140,7 +140,8 @@ final class LongCaptureBar: NSPanel {
         setAutoScrolling(false)
 
         let cancel = PillIconButton(frame: .zero)
-        cancel.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "取消")
+        cancel.image = IconLibrary.toolbarColored("close", fallbackSymbol: "xmark",
+                                                  description: "取消")
         cancel.contentTintColor = .systemRed
         cancel.toolTip = "取消 (ESC)"
         cancel.keyEquivalent = "\u{1b}"
@@ -148,7 +149,8 @@ final class LongCaptureBar: NSPanel {
         cancel.action = #selector(cancelTapped)
 
         let done = PillIconButton(frame: .zero)
-        done.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "完成")
+        done.image = IconLibrary.toolbarColored("confirm", fallbackSymbol: "checkmark",
+                                                description: "完成")
         done.contentTintColor = .systemGreen
         done.toolTip = "完成"
         done.keyEquivalent = "\r"
@@ -160,9 +162,10 @@ final class LongCaptureBar: NSPanel {
         texts.spacing = 1
         texts.alignment = .leading
 
-        let stack = NSStackView(views: [texts, PillSeparator(), autoButton, cancel, done])
+        // Single divider, right before ✕ / ✓.
+        let stack = NSStackView(views: [texts, autoButton, PillSeparator(), cancel, done])
         stack.orientation = .horizontal
-        stack.spacing = 10
+        stack.spacing = 8
         stack.alignment = .centerY
         stack.translatesAutoresizingMaskIntoConstraints = false
 

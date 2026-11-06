@@ -35,6 +35,8 @@ mkdir -p "${BUNDLE}/Contents/Resources"
 cp "${BIN_PATH}/${APP_NAME}" "${BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp "Resources/Info.plist" "${BUNDLE}/Contents/Info.plist"
 cp "Resources/AppIcon.icns" "${BUNDLE}/Contents/Resources/AppIcon.icns"
+# Custom toolbar icons (SVG, rendered natively by AppKit).
+cp -R "Resources/icons" "${BUNDLE}/Contents/Resources/icons"
 
 # Prefer a stable self-signed identity (see setup-signing.sh) so TCC keeps the
 # screen-recording grant across rebuilds. Fall back to ad-hoc if it's absent.

@@ -288,12 +288,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         let symbols: [EditorTool: (String, String)] = [
             .select: ("cursorarrow", "选择/移动（点击标注可拖动，Delete 删除）"),
             .rectangle: ("rectangle", "矩形（按住 Shift 画正方形）"),
-            .ellipse: ("circle", "圆形（按住 Shift 画正圆）"),
-            .arrow: ("arrow.up.right", "箭头"),
-            .pen: ("pencil.line", "画笔（按住 Shift 画直线）"),
-            .mosaic: ("square.grid.3x3", "马赛克"),
-            .text: ("t.square", "文字"),
-            .number: ("number.circle", "编号")
+            .ellipse: ("ellipse", "圆形（按住 Shift 画正圆）"),
+            .arrow: ("arrow", "箭头"),
+            .pen: ("pen", "画笔（按住 Shift 画直线）"),
+            .mosaic: ("mosaic", "马赛克"),
+            .text: ("text", "文字"),
+            .number: ("number", "编号")
         ]
 
         var views: [NSView] = []
@@ -306,20 +306,16 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             views.append(button)
         }
 
-        views.append(PillSeparator())
-
-        // Toggles the size/colour row; its tint mirrors the current colour.
-        paletteButton.image = NSImage(systemSymbolName: "paintpalette",
-                                      accessibilityDescription: "颜色与线宽")
+        // Toggles the size/colour row; tinted like the other toolbar icons.
+        paletteButton.image = IconLibrary.toolbar("palette", fallbackSymbol: "paintpalette",
+                                                  description: "颜色与线宽")
         paletteButton.toolTip = "颜色与线宽"
         paletteButton.target = self
         paletteButton.action = #selector(toggleStyleBar)
         paletteButton.setButtonType(.pushOnPushOff)
         views.append(paletteButton)
 
-        views.append(PillSeparator())
-
-        let undo = pillButton("arrow.uturn.backward", tip: "撤销 ⌘Z", action: #selector(undoTapped))
+        let undo = pillButton("undo", tip: "撤销 ⌘Z", action: #selector(undoTapped))
         undo.keyEquivalent = "z"
         undo.keyEquivalentModifierMask = .command
         undoButton = undo
@@ -328,7 +324,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         redo.keyEquivalent = "z"
         redo.keyEquivalentModifierMask = [.command, .shift]
         redoButton = redo
-        views.append(contentsOf: [undo, redo, PillSeparator()])
+        views.append(contentsOf: [undo, redo])
 
         let zoomOut = pillButton("minus.magnifyingglass", tip: "缩小 ⌘-",
                                  action: #selector(zoomOutTapped))
@@ -351,27 +347,25 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
 
         let fit = pillButton("arrow.up.left.and.arrow.down.right", tip: "适应窗口",
                              action: #selector(zoomFitTapped))
-        views.append(contentsOf: [zoomOut, zoomButton, zoomIn, fit, PillSeparator()])
+        views.append(contentsOf: [zoomOut, zoomButton, zoomIn, fit])
 
         let pin = pillButton("pin", tip: "钉在屏幕上 ⌘⇧P", action: #selector(pinTapped))
         pin.keyEquivalent = "p"
         pin.keyEquivalentModifierMask = [.command, .shift]
 
-        let save = pillButton("square.and.arrow.down", tip: "保存 ⌘S", action: #selector(saveTapped))
+        let save = pillButton("save", tip: "保存 ⌘S", action: #selector(saveTapped))
         save.keyEquivalent = "s"
         save.keyEquivalentModifierMask = .command
-        let long = pillButton("scroll", tip: "长截图", action: #selector(longCaptureTapped))
-        views.append(contentsOf: [pin, save, long, PillSeparator()])
-
-        let cancel = pillButton("xmark", tip: "放弃 (ESC)", action: #selector(cancelTapped))
+        let long = pillButton("long", tip: "长截图", action: #selector(longCaptureTapped))
+        views.append(contentsOf: [pin, save, long, PillSeparator()])   // only divider: before ✕ / ✓
+        let cancel = pillButton("close", tip: "放弃 (ESC)", action: #selector(cancelTapped))
         cancel.contentTintColor = .systemRed
         cancel.keyEquivalent = "\u{1b}"
 
-        let done = pillButton("checkmark", tip: "完成：复制并关闭", action: #selector(doneTapped))
+        let done = pillButton("confirm", tip: "完成：复制并关闭", action: #selector(doneTapped))
         done.contentTintColor = .systemGreen
         done.keyEquivalent = "\r"
         views.append(contentsOf: [cancel, done])
-
         let stack = NSStackView(views: views)
         stack.orientation = .horizontal
         stack.spacing = 6
@@ -423,8 +417,10 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     }
 
     private func pillButton(_ symbol: String, tip: String, action: Selector) -> PillIconButton {
+        // Prefer the custom SVG icon named `symbol` (see IconLibrary); fall back
+        // to the SF Symbol of the same name for icons without one (select, redo).
         let button = PillIconButton(frame: .zero)
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
+        button.image = IconLibrary.toolbar(symbol, fallbackSymbol: symbol, description: tip)
         button.toolTip = tip
         button.target = self
         button.action = action
@@ -499,7 +495,6 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     private func selectColor(index: Int) {
         guard palette.indices.contains(index) else { return }
         viewModel.currentStyle.color = palette[index]
-        paletteButton.contentTintColor = palette[index]
         for (i, swatch) in colorButtons.enumerated() { swatch.isChosen = (i == index) }
     }
 

@@ -68,13 +68,21 @@ final class PillSeparator: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.separatorColor.cgColor
+        translatesAutoresizingMaskIntoConstraints = false
+        widthAnchor.constraint(equalToConstant: 1).isActive = true
+        heightAnchor.constraint(equalToConstant: 20).isActive = true
     }
 
     required init?(coder: NSCoder) { super.init(coder: coder) }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 1, height: 18) }
+    override var intrinsicContentSize: NSSize { NSSize(width: 1, height: 20) }
+
+    /// Drawn (not a layer colour) so it follows light/dark appearance, and a
+    /// touch stronger than `.separatorColor` so the 1pt line stays readable.
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.tertiaryLabelColor.withAlphaComponent(0.35).setFill()
+        bounds.fill()
+    }
 }
 
 /// Base button that shows its hint via the custom white-on-dark HoverTip.
@@ -121,7 +129,7 @@ final class PillIconButton: TipButton {
     /// keeps each symbol at this point size (no upscaling, so they look uniform)
     /// and only shrinks the rare glyph that would otherwise overflow — which is
     /// what was clipping the wider icons before.
-    private static let defaultGlyphPointSize: CGFloat = 18
+    private static let defaultGlyphPointSize: CGFloat = 20
 
     /// Per-button glyph size override (e.g. a slightly larger save icon).
     /// Re-applies the symbol configuration to the current image when changed.

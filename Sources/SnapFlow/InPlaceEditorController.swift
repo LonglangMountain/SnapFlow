@@ -241,8 +241,10 @@ final class InPlaceEditorController: NSObject {
     }
 
     private func pillButton(_ symbol: String, tip: String, action: Selector) -> PillIconButton {
+        // Prefer the custom SVG icon named `symbol` (see IconLibrary); fall back
+        // to the SF Symbol of the same name for icons without one (select, redo).
         let button = PillIconButton(frame: .zero)
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
+        button.image = IconLibrary.toolbar(symbol, fallbackSymbol: symbol, description: tip)
         button.toolTip = tip
         button.target = self
         button.action = action
@@ -253,10 +255,10 @@ final class InPlaceEditorController: NSObject {
     private func makeToolPill() -> NSView {
         let symbols: [EditorTool: (String, String)] = [
             .select: ("cursorarrow", "选择/移动（点击标注可拖动，Delete 删除）"), .rectangle: ("rectangle", "矩形（按住 Shift 画正方形）"),
-            .ellipse: ("circle", "圆形（按住 Shift 画正圆）"), .arrow: ("arrow.up.right", "箭头"),
-            .pen: ("pencil.line", "画笔（按住 Shift 画直线）"),
-            .mosaic: ("square.grid.3x3", "马赛克"), .text: ("t.square", "文字"),
-            .number: ("number.circle", "编号")
+            .ellipse: ("ellipse", "圆形（按住 Shift 画正圆）"), .arrow: ("arrow", "箭头"),
+            .pen: ("pen", "画笔（按住 Shift 画直线）"),
+            .mosaic: ("mosaic", "马赛克"), .text: ("text", "文字"),
+            .number: ("number", "编号")
         ]
         var views: [NSView] = []
         for (index, tool) in toolOrder.enumerated() {
@@ -267,15 +269,15 @@ final class InPlaceEditorController: NSObject {
             toolButtons.append(button)
             views.append(button)
         }
-        views.append(PillSeparator())
-        paletteButton.image = NSImage(systemSymbolName: "paintpalette", accessibilityDescription: "颜色与线宽")
+        paletteButton.image = IconLibrary.toolbar("palette", fallbackSymbol: "paintpalette",
+                                                  description: "颜色与线宽")
         paletteButton.toolTip = "颜色与线宽"
         paletteButton.target = self
         paletteButton.action = #selector(toggleStyleBar)
         paletteButton.setButtonType(.pushOnPushOff)
-        views += [paletteButton, PillSeparator()]
+        views += [paletteButton]
 
-        let undo = pillButton("arrow.uturn.backward", tip: "撤销 ⌘Z", action: #selector(undoTapped))
+        let undo = pillButton("undo", tip: "撤销 ⌘Z", action: #selector(undoTapped))
         undo.keyEquivalent = "z"; undo.keyEquivalentModifierMask = .command
         undoButton = undo
         let redo = pillButton("arrow.uturn.forward", tip: "重做 ⌘⇧Z", action: #selector(redoTapped))
@@ -283,30 +285,27 @@ final class InPlaceEditorController: NSObject {
         redoButton = redo
         // Redo icon is hidden by request; the button is parked (zero-size) in the
         // pill below so ⌘⇧Z still works — only `undo` shows in the bar.
-        views += [undo, PillSeparator()]
+        views += [undo]
 
         let pin = pillButton("pin", tip: "钉在屏幕上 ⌘⇧P", action: #selector(pinTapped))
         pin.keyEquivalent = "p"; pin.keyEquivalentModifierMask = [.command, .shift]
-        let save = pillButton("square.and.arrow.down", tip: "保存 ⌘S", action: #selector(saveTapped))
+        let save = pillButton("save", tip: "保存 ⌘S", action: #selector(saveTapped))
         save.keyEquivalent = "s"; save.keyEquivalentModifierMask = .command
-        save.glyphPointSize = 20   // save icon reads a touch larger than the rest
-        let ocr = pillButton("text.viewfinder", tip: "识别文字", action: #selector(ocrTapped))
-        let long = pillButton("scroll", tip: "长截图", action: #selector(longCaptureTapped))
-        long.glyphPointSize = 19   // nudge the long-capture icon up 1pt
+        let ocr = pillButton("ocr", tip: "识别文字", action: #selector(ocrTapped))
+        let long = pillButton("long", tip: "长截图", action: #selector(longCaptureTapped))
         let actionSep = PillSeparator()
         views += [pin, save, ocr, long, actionSep]
 
-        let cancel = pillButton("xmark", tip: "放弃 (ESC)", action: #selector(cancelTapped))
+        let cancel = pillButton("close", tip: "放弃 (ESC)", action: #selector(cancelTapped))
         cancel.contentTintColor = .systemRed; cancel.keyEquivalent = "\u{1b}"
-        let done = pillButton("checkmark", tip: "完成：复制并关闭", action: #selector(doneTapped))
+        let done = pillButton("confirm", tip: "完成：复制并关闭", action: #selector(doneTapped))
         done.contentTintColor = .systemGreen; done.keyEquivalent = "\r"
         views += [cancel, done]
 
         let stack = NSStackView(views: views)
-        stack.orientation = .horizontal; stack.spacing = 4; stack.alignment = .centerY
-        // The 长截图↔关闭 divider felt oversized; tighten just that gap.
-        stack.setCustomSpacing(2, after: long)
-        stack.setCustomSpacing(2, after: actionSep)
+        stack.orientation = .horizontal; stack.spacing = 2; stack.alignment = .centerY
+        // Only the divider before ✕ / ✓ remains; keep it close to its group.
+        stack.setCustomSpacing(4, after: actionSep)
         let bar = pill(stack, radius: 8)
         // Keep the redo button in the hierarchy (zero-size, not hidden) so its
         // ⌘⇧Z key equivalent keeps firing without drawing an icon.
@@ -378,7 +377,6 @@ final class InPlaceEditorController: NSObject {
     private func selectColor(index: Int) {
         guard palette.indices.contains(index) else { return }
         viewModel.currentStyle.color = palette[index]
-        paletteButton.contentTintColor = palette[index]
         for (i, s) in colorButtons.enumerated() { s.isChosen = (i == index) }
     }
 
