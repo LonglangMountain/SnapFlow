@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   图标源文件移至 `Resources/icons`，AppKit 直接渲染矢量。
 - 操作栏图标间距收紧；仅保留 ✕ / ✓ 前的一条分隔线并加长。
 - 色盘图标不再跟随当前画笔颜色，与其他图标保持同色。
+- 工具选中背景改为居中的正方形；OCR 按钮在识别结果面板打开期间显示选中态，
+  关闭后恢复。
+- 一次性按钮点击后不再残留按下高亮。
 
 ## [0.3.2] - 2026-10-29
 
