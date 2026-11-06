@@ -284,8 +284,11 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
         // Scenario B (fine extraction): recognize the current image and show the
         // result list for partial selection/copy — no screen re-capture. Pass
         // the live region so the panel can dock beside (not over) the shot.
-        controller.onRecognize = { [weak self] image in
-            self?.showOCRList(for: image, region: region, on: screen)
+        controller.onRecognize = { [weak self, weak controller] image in
+            controller?.setOCRActive(true)
+            self?.showOCRList(for: image, region: region, on: screen) {
+                controller?.setOCRActive(false)
+            }
         }
         // Long-capture reuses the CURRENT selection region directly — no new
         // selection overlay. The frozen editor tears down, then we scroll-capture
@@ -468,13 +471,15 @@ final class CaptureManager: NSObject, CaptureOverlayDelegate, WindowSelectionDel
     /// Scenario B: recognize the editor image and open the result list panel
     /// docked to the right of the capture region.
     @MainActor
-    private func showOCRList(for image: CGImage, region: CGRect, on screen: NSScreen) {
+    private func showOCRList(for image: CGImage, region: CGRect, on screen: NSScreen,
+                             onClose: (() -> Void)? = nil) {
         Task { @MainActor in
             let segments = await TextRecognizer.recognize(image)
             let controller = OCRResultListController(segments: segments)
             controller.onClose = { [weak self] in
                 self?.ocrResult = nil
                 self?.updateActivationPolicy()
+                onClose?()
             }
             self.ocrResult = controller
             self.updateActivationPolicy()

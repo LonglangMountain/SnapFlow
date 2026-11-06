@@ -154,6 +154,29 @@ final class PillIconButton: TipButton {
 
     required init?(coder: NSCoder) { super.init(coder: coder) }
 
+    /// True when configured as a toggle (tools, palette); remembered because
+    /// AppKit exposes no getter for the button type.
+    private(set) var actsAsToggle = false
+
+    /// Set by callers that drive `state` themselves (e.g. OCR while its results
+    /// panel is open). Prevents the post-click cleanup below from clearing it.
+    var drivesOwnState = false
+
+    override func setButtonType(_ type: NSButton.ButtonType) {
+        super.setButtonType(type)
+        actsAsToggle = (type == .pushOnPushOff)
+    }
+
+    /// A click that opens another window (e.g. the OCR results panel) can hand
+    /// the mouse-up to that window, leaving this button's press highlight stuck
+    /// — it looks selected. Clear it once the click is handled; toggle buttons
+    /// and buttons that drive their own state keep it.
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        highlight(false)
+        if !actsAsToggle && !drivesOwnState { state = .off }
+    }
+
     /// Enlarge every assigned SF Symbol and keep it template-tinted.
     override var image: NSImage? {
         get { super.image }
@@ -171,8 +194,9 @@ final class PillIconButton: TipButton {
 
     override func draw(_ dirtyRect: NSRect) {
         if state == .on {
+            // Square selection wash, centred in the 33×31 button (27×27).
             NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 3),
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 2),
                          xRadius: 6, yRadius: 6).fill()
         }
         super.draw(dirtyRect)

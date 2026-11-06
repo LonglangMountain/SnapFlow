@@ -18,6 +18,9 @@ final class InPlaceEditorController: NSObject {
     private var toolButtons: [PillIconButton] = []
     private var undoButton: PillIconButton?
     private var redoButton: PillIconButton?
+    /// Highlighted while the OCR results panel is open (OCR is an action, not
+    /// a mode — the highlight only reflects "results are showing").
+    private var ocrButton: PillIconButton?
 
     private let lineWidths: [CGFloat] = [2, 4, 10, 18]
     private var sizeButtons: [SizeDotButton] = []
@@ -292,6 +295,7 @@ final class InPlaceEditorController: NSObject {
         let save = pillButton("save", tip: "保存 ⌘S", action: #selector(saveTapped))
         save.keyEquivalent = "s"; save.keyEquivalentModifierMask = .command
         let ocr = pillButton("ocr", tip: "识别文字", action: #selector(ocrTapped))
+        ocrButton = ocr
         let long = pillButton("long", tip: "长截图", action: #selector(longCaptureTapped))
         let actionSep = PillSeparator()
         views += [pin, save, ocr, long, actionSep]
@@ -394,6 +398,14 @@ final class InPlaceEditorController: NSObject {
     @objc private func ocrTapped() {
         guard let image = viewModel.render() else { return }
         onRecognize?(image)
+    }
+
+    /// Called by the owner when the OCR results panel opens / closes, so the
+    /// button reads as "results showing" while that panel is up.
+    func setOCRActive(_ active: Bool) {
+        ocrButton?.drivesOwnState = active
+        ocrButton?.state = active ? .on : .off
+        ocrButton?.contentTintColor = active ? .controlAccentColor : .labelColor
     }
 
     @objc private func pinTapped() {
