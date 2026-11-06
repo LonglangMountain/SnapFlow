@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.2] - 2026-10-28
+## [0.3.3] - 2026-11-06
+
+### Changed
+- 编辑器与长截图操作栏改用自定义 SVG 图标，统一尺寸、线宽与配色；
+  图标源文件移至 `Resources/icons`，AppKit 直接渲染矢量。
+- 操作栏图标间距收紧；仅保留 ✕ / ✓ 前的一条分隔线并加长。
+- 色盘图标不再跟随当前画笔颜色，与其他图标保持同色。
+
+## [0.3.2] - 2026-10-29
 
 ### Fixed
 - 区域截图 / 提取屏幕文字可以截到 Chrome DevTools「审查元素」的高亮框：
@@ -87,7 +95,8 @@ AppKit + ScreenCaptureKit.
 - Full Retina-resolution captures.
 - Universal binary (Apple Silicon + Intel); packaged as `.zip` and `.dmg`.
 
-[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/LonglangMountain/SnapFlow/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.3
 [0.3.2]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.2
 [0.3.1]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.1
 [0.3.0]: https://github.com/LonglangMountain/SnapFlow/releases/tag/v0.3.0
